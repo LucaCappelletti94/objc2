@@ -427,6 +427,28 @@ impl Method {
         }
     }
 
+    fn add_safety_documentation(
+        documentation: &mut Documentation,
+        safety: &SafetyProperty,
+        safe: bool,
+        unsafe_reason: Option<String>,
+    ) {
+        if safe {
+            return;
+        }
+
+        let inferred_safety = safety.to_safety_comment();
+        if inferred_safety.is_some() || unsafe_reason.is_some() {
+            documentation.add("# Safety");
+        }
+        if let Some(reason) = inferred_safety {
+            documentation.add(reason);
+        }
+        if let Some(reason) = unsafe_reason {
+            documentation.add(reason);
+        }
+    }
+
     pub(crate) fn parse_method(
         entity: Entity<'_>,
         data: MethodData,
@@ -668,12 +690,7 @@ impl Method {
 
         let mut documentation = Documentation::from_entity(&entity, context);
 
-        if let Some(safety) = safety.to_safety_comment() {
-            if data.unsafe_ != Some(false) {
-                documentation.add("# Safety");
-                documentation.add(safety);
-            }
-        }
+        Self::add_safety_documentation(&mut documentation, &safety, safe, data.unsafe_reason);
 
         Some((
             modifiers.designated_initializer,
@@ -844,12 +861,12 @@ impl Method {
                 safety.is_safe() && default_safety.automatically_safe
             };
 
-            if let Some(safety) = safety.to_safety_comment() {
-                if getter_data.unsafe_ != Some(false) {
-                    documentation.add("# Safety");
-                    documentation.add(safety);
-                }
-            }
+            Self::add_safety_documentation(
+                &mut documentation,
+                &safety,
+                safe,
+                getter_data.unsafe_reason,
+            );
 
             let fn_name = if let Some(renamed) = &getter_data.renamed {
                 renamed.clone()
@@ -968,12 +985,12 @@ impl Method {
                     _ => {}
                 }
 
-                if let Some(safety) = safety.to_safety_comment() {
-                    if setter_data.unsafe_ != Some(false) {
-                        documentation.add("# Safety");
-                        documentation.add(safety);
-                    }
-                }
+                Self::add_safety_documentation(
+                    &mut documentation,
+                    &safety,
+                    safe,
+                    setter_data.unsafe_reason,
+                );
 
                 Some(Method {
                     selector,
@@ -1287,5 +1304,39 @@ impl Method {
 
             Ok(())
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn safe_method_has_no_safety_section() {
+        let mut documentation = Documentation::empty();
+        Method::add_safety_documentation(
+            &mut documentation,
+            &SafetyProperty::Safe,
+            true,
+            Some("Configured reason.".into()),
+        );
+        assert_eq!(documentation, Documentation::empty());
+    }
+
+    #[test]
+    fn unsafe_method_documents_inferred_and_configured_reasons() {
+        let mut documentation = Documentation::empty();
+        Method::add_safety_documentation(
+            &mut documentation,
+            &SafetyProperty::new_unsafe("Inferred"),
+            false,
+            Some("Configured reason.".into()),
+        );
+
+        let mut expected = Documentation::empty();
+        expected.add("# Safety");
+        expected.add("Inferred.");
+        expected.add("Configured reason.");
+        assert_eq!(documentation, expected);
     }
 }

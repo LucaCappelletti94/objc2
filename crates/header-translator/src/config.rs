@@ -822,6 +822,9 @@ pub struct MethodData {
     #[serde(rename = "unsafe")]
     #[serde(default)]
     pub unsafe_: Option<bool>,
+    #[serde(rename = "unsafe-reason")]
+    #[serde(default)]
+    pub unsafe_reason: Option<String>,
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_argument_overrides")]
     pub arguments: HashMap<usize, TypeOverride>,
@@ -857,6 +860,7 @@ impl MethodData {
 
         Self {
             unsafe_,
+            unsafe_reason: self.unsafe_reason.or(superclass.unsafe_reason),
             renamed: self.renamed.or(superclass.renamed),
             skipped: self.skipped || superclass.skipped,
             arguments,
